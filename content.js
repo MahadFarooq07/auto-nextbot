@@ -28,6 +28,11 @@
 
   // Separate, shorter cooldown for dismissing "OK" popups.
   const OK_COOLDOWN_MS = 2500;
+  // Quiz / dropdown routines re-run at most this often (also delays the first
+  // run right after picking, so there's time to map the other elements too).
+  const ROUTINE_COOLDOWN_MS = 15000;
+  // Stuck rescue: if nothing has happened for this long, click NEXT 3 times.
+  const STALL_MS = 30000;
 
   const DEFAULTS = {
     mode: "bar", // "bar" | "state"
@@ -37,6 +42,10 @@
     nextPoint: null, // { fx, fy } as fractions of the viewport
     okSelector: null, // optional popup-dismiss button ("view entire slide" etc.)
     okPoint: null,
+    answerSelector: null, // optional: one multiple-choice answer option
+    submitSelector: null, // optional: quiz SUBMIT button
+    dropdownSelector: null, // optional: quiz dropdown
+    stallRescue: false, // optional: click NEXT x3 when stuck (sort slides etc.)
     enabled: true,
     threshold: 99,
   };
@@ -53,6 +62,11 @@
   let lastClickAt = 0;
   let okLastClickAt = 0;
   let lastProgress = null;
+  // Quiz / dropdown / stuck-rescue routine state.
+  let routineActive = false;
+  let quizLastRun = 0;
+  let ddLastRun = 0;
+  let lastActivityAt = Date.now();
   let statusNote = "";
   let noteUntil = 0;
   // Bar mode: a candidate may only trigger after it has been seen LOW first.
@@ -63,6 +77,10 @@
   let stateSigSince = 0;
   let statePend = null;
   let statePendN = 0;
+  // The signature that caused a fire (= how the button looks when a video has
+  // ended). Once learned, ONLY changes into this look fire again — so a video
+  // starting to play after a long-static slide can't false-trigger.
+  let stateFiredSig = null;
 
   const store = chrome.storage.local;
 
@@ -249,16 +267,29 @@
   }
 
   function fireNext() {
+    if (!cfg) return; // e.g. cleared mid-routine
     let ok = false;
-    // The point is exactly where the user placed the marker — prefer it.
-    if (cfg.nextPoint) ok = clickAtPoint(cfg.nextPoint.fx, cfg.nextPoint.fy);
-    if (!ok && cfg.nextSelector) {
+    const px = cfg.nextPoint ? cfg.nextPoint.fx * innerWidth : null;
+    const py = cfg.nextPoint ? cfg.nextPoint.fy * innerHeight : null;
+    // Selector first: it survives layout shifts (the button may have moved
+    // since the point was mapped). The exact mapped point is used when it
+    // still lands inside the button, its center otherwise.
+    if (cfg.nextSelector) {
       const btn = document.querySelector(cfg.nextSelector);
-      if (btn) {
-        robustClick(btn);
+      if (btn && isShown(btn)) {
+        const r = btn.getBoundingClientRect();
+        const usePoint =
+          px != null && px >= r.left && px <= r.right && py >= r.top && py <= r.bottom;
+        fullClick(
+          btn,
+          usePoint ? px : r.left + r.width / 2,
+          usePoint ? py : r.top + r.height / 2
+        );
         ok = true;
       }
     }
+    // Raw point fallback: clicks whatever lives at the mapped spot now.
+    if (!ok && cfg.nextPoint) ok = clickAtPoint(cfg.nextPoint.fx, cfg.nextPoint.fy);
     if (ok) {
       lastClickAt = Date.now();
       seen = {};
@@ -270,24 +301,158 @@
     }
   }
 
-  // The mapped OK button (blocking popup) — click it whenever it is actually
-  // visible on screen. The elementFromPoint check makes sure it is really the
-  // thing on top, so a hidden/covered button never gets phantom-clicked.
-  function checkOkPopup() {
-    const el = document.querySelector(cfg.okSelector);
-    if (!el) return;
+  // True when the element is actually visible on screen AND on top — the
+  // elementFromPoint check means hidden/covered elements never get
+  // phantom-clicked.
+  function isShown(el) {
+    if (!el) return false;
     const r = el.getBoundingClientRect();
-    if (r.width < 2 || r.height < 2) return;
+    if (r.width < 2 || r.height < 2) return false;
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
-    if (cx < 0 || cy < 0 || cx > innerWidth || cy > innerHeight) return;
+    if (cx < 0 || cy < 0 || cx > innerWidth || cy > innerHeight) return false;
     const top = document.elementFromPoint(cx, cy);
-    if (!top || !(el.contains(top) || top.contains(el))) return;
+    return !!top && (el.contains(top) || top.contains(el));
+  }
+
+  // The mapped OK button (blocking popup) — click it whenever it shows up.
+  function checkOkPopup() {
+    const el = document.querySelector(cfg.okSelector);
+    if (!el || !isShown(el)) return;
     const now = Date.now();
     if (now - okLastClickAt < OK_COOLDOWN_MS) return;
     okLastClickAt = now;
-    fullClick(el, cx, cy);
+    lastActivityAt = now;
+    const r = el.getBoundingClientRect();
+    fullClick(el, r.left + r.width / 2, r.top + r.height / 2);
     setNote("clicked OK ✓", 2500);
+  }
+
+  /* ---------------- quiz / dropdown / stuck routines ---------------- */
+
+  // The user mapped ONE answer option; its same-tag siblings are the other
+  // options. Pick one at random.
+  function randomOption(el) {
+    const parent = el.parentElement;
+    let opts = [el];
+    if (parent) {
+      const sibs = [...parent.children].filter((c) => c.tagName === el.tagName);
+      if (sibs.length > 1) opts = sibs;
+    }
+    return opts[Math.floor(Math.random() * opts.length)];
+  }
+
+  // Multiple choice: random answer -> SUBMIT (if mapped) -> NEXT twice.
+  function runQuizRoutine() {
+    const ans = document.querySelector(cfg.answerSelector);
+    if (!ans) return;
+    routineActive = true;
+    quizLastRun = Date.now();
+    lastActivityAt = Date.now();
+    robustClick(randomOption(ans));
+    setNote("quiz: picked a random answer", 3000);
+    setTimeout(() => {
+      if (cfg.submitSelector) {
+        const sub = document.querySelector(cfg.submitSelector);
+        if (sub && isShown(sub)) {
+          robustClick(sub);
+          setNote("quiz: clicked SUBMIT", 3000);
+        }
+      }
+      setTimeout(() => {
+        fireNext();
+        setTimeout(() => {
+          fireNext();
+          routineActive = false;
+          lastActivityAt = Date.now();
+        }, 2000);
+      }, 1600);
+    }, 900);
+  }
+
+  // Dropdown: random selection -> NEXT twice.
+  function runDropdownRoutine() {
+    const dd = document.querySelector(cfg.dropdownSelector);
+    if (!dd) return;
+    routineActive = true;
+    ddLastRun = Date.now();
+    lastActivityAt = Date.now();
+    const sel = dd.matches("select") ? dd : dd.querySelector("select");
+    if (sel && sel.options.length) {
+      const usable = [...sel.options].filter((o) => !o.disabled && o.value !== "");
+      const opt =
+        usable[Math.floor(Math.random() * usable.length)] ||
+        sel.options[sel.options.length - 1];
+      sel.value = opt.value;
+      sel.dispatchEvent(new Event("input", { bubbles: true }));
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+      setNote("dropdown: picked a random option", 3000);
+    } else {
+      // Custom (non-<select>) dropdown: open it, then click a random option.
+      robustClick(dd);
+      setTimeout(() => {
+        const opts = [...document.querySelectorAll('[role="option"]')].filter(isShown);
+        if (opts.length) {
+          robustClick(opts[Math.floor(Math.random() * opts.length)]);
+          setNote("dropdown: picked a random option", 3000);
+        }
+      }, 700);
+    }
+    setTimeout(() => {
+      fireNext();
+      setTimeout(() => {
+        fireNext();
+        routineActive = false;
+        lastActivityAt = Date.now();
+      }, 2000);
+    }, 1800);
+  }
+
+  // Stuck rescue (sort-these-options slides etc.): nothing moved for a while
+  // -> click NEXT 3 times. The OK watcher cleans up any popups in between.
+  function runStallRoutine() {
+    routineActive = true;
+    lastActivityAt = Date.now();
+    setNote("stuck — clicking NEXT ×3", 4000);
+    fireNext();
+    setTimeout(() => {
+      fireNext();
+      setTimeout(() => {
+        fireNext();
+        routineActive = false;
+        lastActivityAt = Date.now();
+      }, 2200);
+    }, 2200);
+  }
+
+  function maybeRunRoutines(hasNext, hasTrigger) {
+    if (routineActive) return true;
+    const now = Date.now();
+    if (hasNext && cfg.answerSelector && now - quizLastRun > ROUTINE_COOLDOWN_MS) {
+      const ans = document.querySelector(cfg.answerSelector);
+      if (ans && isShown(ans)) {
+        runQuizRoutine();
+        return true;
+      }
+    }
+    if (hasNext && cfg.dropdownSelector && now - ddLastRun > ROUTINE_COOLDOWN_MS) {
+      const dd = document.querySelector(cfg.dropdownSelector);
+      if (dd && isShown(dd)) {
+        runDropdownRoutine();
+        return true;
+      }
+    }
+    if (
+      cfg.stallRescue &&
+      hasNext &&
+      hasTrigger &&
+      now - lastActivityAt > STALL_MS &&
+      now - lastClickAt > STALL_MS
+    ) {
+      runStallRoutine();
+      return true;
+    }
+    return false;
   }
 
   /* ---------------- main poll loop ---------------- */
@@ -301,6 +466,10 @@
     if (cfg.okSelector) checkOkPopup();
     const hasNext = !!(cfg.nextSelector || cfg.nextPoint);
     const hasTrigger = cfg.mode === "state" ? !!cfg.stateSelector : !!cfg.barSelector;
+    if (maybeRunRoutines(hasNext, hasTrigger)) {
+      updateBadge();
+      return;
+    }
     if (!hasNext || !hasTrigger) {
       updateBadge();
       return;
@@ -317,6 +486,7 @@
       }
       const sig = stateSignature(el);
       const now = Date.now();
+      if (sig !== stateSig) lastActivityAt = now;
       if (stateSig === null) {
         stateSig = sig;
         stateSigSince = now;
@@ -334,13 +504,19 @@
         if (statePendN >= STATE_STREAK) {
           // Only a change away from a LONG-held state means "the video
           // ended" — brief states (right after our own NEXT click, or icon
-          // flickers) are just adopted as the new current state.
-          const longHeld = now - stateSigSince >= STATE_STABLE_MS;
+          // flickers) are just adopted as the new current state. And once we
+          // know what "ended" looks like, only that look may fire.
+          const longHeld =
+            now - stateSigSince >= STATE_STABLE_MS &&
+            (stateFiredSig === null || sig === stateFiredSig);
           if (longHeld && now - lastClickAt <= CLICK_COOLDOWN_MS) {
             // Still in click cooldown: hold off adopting the new state so the
             // trigger isn't lost — retried next tick.
           } else {
-            if (longHeld) shouldFire = true;
+            if (longHeld) {
+              shouldFire = true;
+              stateFiredSig = sig;
+            }
             stateSig = sig;
             stateSigSince = now - statePendN * POLL_MS;
             statePend = null;
@@ -375,6 +551,12 @@
           display = cands[k];
           break;
         }
+      }
+      if (
+        display != null &&
+        (lastProgress == null || Math.abs(display - lastProgress) > 0.3)
+      ) {
+        lastActivityAt = Date.now();
       }
       lastProgress = display;
     }
@@ -595,12 +777,23 @@
       stateSigSince = 0;
       statePend = null;
       statePendN = 0;
+      stateFiredSig = null;
     } else if (picking === "ok") {
       cfg.okSelector = sel;
       cfg.okPoint = { fx: e.clientX / innerWidth, fy: e.clientY / innerHeight };
       // Don't insta-click the popup that is open right now — give the user a
       // moment after picking.
       okLastClickAt = Date.now();
+    } else if (picking === "answer") {
+      cfg.answerSelector = sel;
+      // Delay the first run so there's time to map SUBMIT too.
+      quizLastRun = Date.now();
+    } else if (picking === "submit") {
+      cfg.submitSelector = sel;
+      quizLastRun = Date.now();
+    } else if (picking === "dropdown") {
+      cfg.dropdownSelector = sel;
+      ddLastRun = Date.now();
     } else {
       cfg.nextSelector = sel;
       cfg.nextPoint = { fx: e.clientX / innerWidth, fy: e.clientY / innerHeight };
@@ -640,6 +833,9 @@
     state: "Hover the PLAY/PAUSE button — scroll wheel cycles overlapping/nested elements",
     next: "Hover the NEXT button (or any spot to click) — scroll cycles elements",
     ok: "Hover the popup's OK button — it will be auto-clicked whenever the popup shows up",
+    answer: "Hover ONE quiz answer option — a random one of its siblings gets picked each time",
+    submit: "Hover the quiz SUBMIT button",
+    dropdown: "Hover the quiz DROPDOWN — a random option gets selected each time",
   };
 
   function startPicking(target) {
@@ -721,6 +917,15 @@
         fx: Math.max(0, Math.min(1, e.clientX / innerWidth)),
         fy: Math.max(0, Math.min(1, e.clientY / innerHeight)),
       };
+      // Re-learn the selector of whatever the marker was dropped on, so the
+      // click keeps following that element even if the layout shifts later.
+      marker.style.display = "none";
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      marker.style.display = "block";
+      cfg.nextSelector =
+        under && under !== document.body && under !== document.documentElement && !isOurs(under)
+          ? cssPath(under)
+          : null;
       saveCfg(() => store.set({ [PICK_DONE_KEY]: Date.now() }));
       setNote("NEXT spot saved", 2000);
       updateBadge();
@@ -795,6 +1000,10 @@
       stateFound: hasState ? !!document.querySelector(cfg.stateSelector) : false,
       nextFound: hasPoint || (hasNextSel && !!document.querySelector(cfg.nextSelector)),
       hasOk: !!(cfg && cfg.okSelector),
+      hasAnswer: !!(cfg && cfg.answerSelector),
+      hasSubmit: !!(cfg && cfg.submitSelector),
+      hasDropdown: !!(cfg && cfg.dropdownSelector),
+      stallRescue: !!(cfg && cfg.stallRescue),
       stateArmed: stateSig !== null && Date.now() - stateSigSince >= STATE_STABLE_MS,
       enabled: !!(cfg && cfg.enabled),
       threshold: cfg ? cfg.threshold ?? 99 : 99,
@@ -844,6 +1053,13 @@
         }
         sendResponse({ ok: true });
         break;
+      case "setStallRescue":
+        cfg = Object.assign({}, DEFAULTS, cfg || {});
+        cfg.stallRescue = !!msg.on;
+        lastActivityAt = Date.now();
+        saveCfg();
+        sendResponse({ ok: true });
+        break;
       case "setThreshold":
         if (cfg) {
           const t = Number(msg.threshold);
@@ -862,6 +1078,7 @@
         stateSigSince = 0;
         statePend = null;
         statePendN = 0;
+        stateFiredSig = null;
         lastProgress = null;
         stopAdjust();
         updateBadge();

@@ -39,14 +39,16 @@ async function refresh() {
   setMark("barMark", s.hasBar, s.barFound);
   setMark("stateMark", s.hasState, s.stateFound);
   setMark("nextMark", s.hasNext, s.nextFound);
-  const okMark = document.getElementById("okMark");
-  if (s.hasOk) {
-    okMark.className = "check";
-    okMark.textContent = "✓";
-  } else {
-    okMark.className = "opt";
-    okMark.textContent = "optional";
-  }
+  const setOpt = (id, on) => {
+    const el = document.getElementById(id);
+    el.className = on ? "check" : "opt";
+    el.textContent = on ? "✓" : "optional";
+  };
+  setOpt("okMark", s.hasOk);
+  setOpt("answerMark", s.hasAnswer);
+  setOpt("submitMark", s.hasSubmit);
+  setOpt("dropdownMark", s.hasDropdown);
+  document.getElementById("stall").checked = !!s.stallRescue;
 
   // Highlight which trigger mode is active.
   document.getElementById("pickBar").classList.toggle("active", s.hasCfg && s.mode === "bar");
@@ -94,6 +96,12 @@ async function init() {
   document.getElementById("pickState").addEventListener("click", pick("state"));
   document.getElementById("pickNext").addEventListener("click", pick("next"));
   document.getElementById("pickOk").addEventListener("click", pick("ok"));
+  document.getElementById("pickAnswer").addEventListener("click", pick("answer"));
+  document.getElementById("pickSubmit").addEventListener("click", pick("submit"));
+  document.getElementById("pickDropdown").addEventListener("click", pick("dropdown"));
+  document.getElementById("stall").addEventListener("change", (e) => {
+    send({ type: "setStallRescue", on: e.target.checked });
+  });
   document.getElementById("adjustNext").addEventListener("click", async () => {
     await send({ type: "adjustNext" });
     window.close();

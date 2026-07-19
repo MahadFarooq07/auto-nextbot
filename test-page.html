@@ -88,11 +88,36 @@
     text-align: center;
     font-weight: 600;
   }
+  /* quiz bits */
+  .qopt {
+    display: block;
+    margin: 8px 0;
+    padding: 10px 16px;
+    border: 2px solid #cbd5e1;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 16px;
+    user-select: none;
+  }
+  .qopt:hover { background: #eef2ff; }
+  .qopt.sel { border-color: #4c1de7; background: #e6e0fc; }
+  #submitBtn {
+    margin-top: 12px;
+    background: #4c1de7; color: #fff; border: 0; border-radius: 999px;
+    padding: 10px 30px; font-weight: 700; font-size: 14px; cursor: pointer;
+  }
+  #ddSel {
+    margin-top: 10px; font-size: 16px; padding: 8px 12px; border-radius: 8px;
+  }
+  .feedback { margin-top: 12px; color: #166534; font-weight: 600; }
 </style>
 </head>
 <body>
   <div class="player">
-    <div class="slide" id="slideText"></div>
+    <div class="slide">
+      <div id="slideText"></div>
+      <div id="quizBox"></div>
+    </div>
     <div class="banner" id="slideTitle"></div>
     <div id="progressTrack"><div id="progressFill"></div></div>
     <div class="controls">
@@ -100,18 +125,18 @@
       <button class="roundBtn" id="pauseBtn" title="pause/play">❚❚</button>
       <span id="time">0:00 / 0:12</span>
       <span class="spacer"></span>
-      <span id="counter">1 of 3</span>
+      <span id="counter">1 of 5</span>
       <button class="navBtn" id="prevBtn">&lt; PREV</button>
       <button class="navBtn" id="nextBtn">NEXT &gt;</button>
     </div>
-    <div id="done">✅ Module complete — NEXT was clicked on every slide.</div>
+    <div id="done">✅ Module complete — every slide type was passed automatically.</div>
   </div>
 
   <!-- blocking popup, like real players show when NEXT is clicked too early -->
   <div id="popupOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;">
     <div style="position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);background:#4b5563;color:#4ade80;padding:28px 40px;border-radius:8px;text-align:center;font-size:15px;">
       <div style="font-size:26px;margin-bottom:10px;">ⓘ</div>
-      You have to view the entire slide to continue
+      <span id="popupText">You have to view the entire slide to continue</span>
       <div style="margin-top:16px;">
         <button id="okBtn" style="background:#4c1de7;color:#fff;border:0;border-radius:999px;padding:8px 26px;font-weight:700;cursor:pointer;">OK</button>
       </div>
@@ -120,70 +145,144 @@
 
 <script>
   const SLIDES = [
-    { title: "Seatbelt Penalties", text: "Drivers are also responsible for ensuring any child who is not big enough or old enough to use a seatbelt is secured in an appropriate child car seat or booster seat." },
-    { title: "Demerit Points", text: "If convicted, you will be fined between $200 and $1,000 and receive 2 demerit points. Demerit points remain on your driving record for two years." },
-    { title: "Summary", text: "Always buckle up, and make sure every passenger under 16 is properly secured before you drive." },
+    { type: "video", title: "Seatbelt Penalties", text: "Drivers are also responsible for ensuring any child who is not big enough or old enough to use a seatbelt is secured in an appropriate child car seat or booster seat." },
+    { type: "quiz", title: "Knowledge Check", text: "Which collision type tends to be most dangerous for occupants?", options: ["Rear-end collision", "Side-impact (T-bone) collision", "Single-vehicle rollover", "Low-speed fender bender"] },
+    { type: "sort", title: "Sort These Options", text: "Sort the hazards from most to least dangerous. (Mock sort slide — the player wants NEXT clicked 3 times before it lets you through.)" },
+    { type: "dropdown", title: "Select From The Menu", text: "How many demerit points do you get for a seatbelt conviction?", options: ["— select an answer —", "1 point", "2 points", "6 points"] },
+    { type: "video", title: "Summary", text: "Always buckle up, and make sure every passenger under 16 is properly secured before you drive." },
   ];
-  const DURATION_S = 12; // each slide takes 12 seconds
+  const DURATION_S = 12; // each video slide takes 12 seconds
   let slide = 0;
   let progress = 0; // 0..100
   let paused = false;
+  let selected = false;  // quiz: an option is chosen
+  let submitted = false; // quiz/dropdown: answer locked in
+  let sortClicks = 0;    // sort: NEXT presses so far
 
   const fill = document.getElementById("progressFill");
   const time = document.getElementById("time");
   const counter = document.getElementById("counter");
+  const quizBox = document.getElementById("quizBox");
+  const pauseBtn = document.getElementById("pauseBtn");
 
   function fmt(s) { return Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0"); }
 
-  function render() {
-    document.getElementById("slideTitle").textContent = SLIDES[slide].title;
-    document.getElementById("slideText").textContent = SLIDES[slide].text;
-    counter.textContent = (slide + 1) + " of " + SLIDES.length;
-    fill.style.width = progress + "%";
-    time.textContent = fmt(progress / 100 * DURATION_S) + " / " + fmt(DURATION_S);
-  }
-
-  // Like the real player: the pause icon flips back to play when the slide
-  // finishes (or when manually paused).
-  const pauseBtn = document.getElementById("pauseBtn");
   function renderPauseBtn() {
-    const playing = !paused && progress < 100;
+    const cur = SLIDES[slide];
+    const playing = cur.type === "video" && !paused && progress < 100;
     pauseBtn.textContent = playing ? "❚❚" : "▶";
     pauseBtn.setAttribute("aria-label", playing ? "pause" : "play");
   }
 
+  function render() {
+    const cur = SLIDES[slide];
+    document.getElementById("slideTitle").textContent = cur.title;
+    document.getElementById("slideText").textContent = cur.text;
+    counter.textContent = (slide + 1) + " of " + SLIDES.length;
+    selected = false;
+    submitted = false;
+    sortClicks = 0;
+    quizBox.innerHTML = "";
+
+    if (cur.type === "video") {
+      progress = 0;
+    } else {
+      progress = 100; // non-video slides have no playback
+    }
+
+    if (cur.type === "quiz") {
+      for (const optText of cur.options) {
+        const o = document.createElement("div");
+        o.className = "qopt";
+        o.textContent = optText;
+        o.addEventListener("click", () => {
+          quizBox.querySelectorAll(".qopt").forEach((q) => q.classList.remove("sel"));
+          o.classList.add("sel");
+          selected = true;
+        });
+        quizBox.appendChild(o);
+      }
+      const sub = document.createElement("button");
+      sub.id = "submitBtn";
+      sub.textContent = "SUBMIT";
+      sub.addEventListener("click", () => {
+        if (!selected) return;
+        submitted = true;
+        const fb = document.createElement("div");
+        fb.className = "feedback";
+        fb.textContent = "Answer recorded — click NEXT to continue.";
+        quizBox.appendChild(fb);
+      });
+      quizBox.appendChild(sub);
+    } else if (cur.type === "dropdown") {
+      const sel = document.createElement("select");
+      sel.id = "ddSel";
+      for (const optText of cur.options) {
+        const o = document.createElement("option");
+        o.textContent = optText;
+        o.value = optText.startsWith("—") ? "" : optText;
+        sel.appendChild(o);
+      }
+      sel.addEventListener("change", () => {
+        submitted = sel.selectedIndex > 0;
+      });
+      quizBox.appendChild(sel);
+    }
+
+    fill.style.width = progress + "%";
+    time.textContent =
+      cur.type === "video"
+        ? fmt((progress / 100) * DURATION_S) + " / " + fmt(DURATION_S)
+        : "--:-- / --:--";
+    renderPauseBtn();
+  }
+
   setInterval(() => {
-    if (paused) return;
+    if (paused || SLIDES[slide].type !== "video") return;
     progress = Math.min(100, progress + 100 / (DURATION_S * 10));
     fill.style.width = progress + "%";
-    time.textContent = fmt(progress / 100 * DURATION_S) + " / " + fmt(DURATION_S);
+    time.textContent = fmt((progress / 100) * DURATION_S) + " / " + fmt(DURATION_S);
     renderPauseBtn();
   }, 100);
 
+  function showPopup(text) {
+    document.getElementById("popupText").textContent = text;
+    document.getElementById("popupOverlay").style.display = "block";
+  }
   document.getElementById("okBtn").addEventListener("click", () => {
     document.getElementById("popupOverlay").style.display = "none";
   });
 
   document.getElementById("nextBtn").addEventListener("click", () => {
-    if (progress < 100) {
-      document.getElementById("popupOverlay").style.display = "block";
+    const cur = SLIDES[slide];
+    if (cur.type === "video" && progress < 100) {
+      showPopup("You have to view the entire slide to continue");
       return;
+    }
+    if ((cur.type === "quiz" || cur.type === "dropdown") && !submitted) {
+      showPopup("You have to answer the question to continue");
+      return;
+    }
+    if (cur.type === "sort") {
+      sortClicks++;
+      if (sortClicks < 3) {
+        showPopup("Please review the sort order (" + sortClicks + "/3)");
+        return;
+      }
     }
     if (slide < SLIDES.length - 1) {
       slide++;
-      progress = 0;
       render();
     } else {
       document.getElementById("done").style.display = "block";
     }
   });
   document.getElementById("prevBtn").addEventListener("click", () => {
-    if (slide > 0) { slide--; progress = 0; render(); }
+    if (slide > 0) { slide--; render(); }
   });
   pauseBtn.addEventListener("click", () => { paused = !paused; renderPauseBtn(); });
 
   render();
-  renderPauseBtn();
 </script>
 </body>
 </html>

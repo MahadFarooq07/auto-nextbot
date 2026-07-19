@@ -31,6 +31,15 @@ It doesn't matter what state the button is in when you pick it — the extension
 ### 4. Auto-dismiss blocking popups
 Some players throw up a *"You have to view the entire slide to continue"* popup with an OK button that blocks everything. You can now map that OK button too (**🆗 Pick popup "OK" button** — do it while the popup is open). The extension checks every half second whether that button is actually visible **and on top** — if the popup shows up, OK gets clicked automatically. When the popup is closed, the hidden button is never touched, so there are no phantom clicks.
 
+### 5. Quiz slides
+Courses love to break up the videos with interactive slides. There are three optional mappings for those:
+
+- **🅰 Multiple choice** — map any one answer option (while a question is on screen). Whenever answer options appear, a **random one** gets clicked, then SUBMIT (if you mapped it), then NEXT twice to get past the feedback screen.
+- **🔽 Dropdown questions** — map the dropdown. A random option gets selected, then NEXT twice.
+- **Sort-these-options slides** (and anything else with no video and no question) — flip on **"Stuck 30s? Click NEXT ×3"**. When nothing on the page has moved for 30 seconds, it just clicks NEXT three times, and the OK watcher swats away any popups in between. That's genuinely all a sort slide needs.
+
+The quiz routines only fire when their mapped elements are **actually visible on screen**, so they sit dormant during videos and wake up exactly on question slides.
+
 ![Extension popup](screenshots/popup.png)
 
 ## Install
@@ -49,7 +58,8 @@ Some players throw up a *"You have to view the entire slide to continue"* popup 
 3. Pick the action: **👆 Pick NEXT button / spot** — click exactly where NEXT should be clicked
 4. If the click spot ever needs moving: **📍 Drag-adjust the NEXT click spot** and drag the orange marker wherever you want
 5. Optional: if the site shows a blocking *"view the entire slide"* popup, wait for it to appear once, then **🆗 Pick popup "OK" button** while it's open — from then on it gets dismissed automatically
-6. Done. A little badge bottom-right shows what it's doing (`AutoNext ▶ 43%` or `AutoNext 👁 watching play/pause`). It goes green when it clicks.
+6. Optional, for quiz slides: when a multiple-choice question is on screen, map **🅰 one answer option** and the **☑️ SUBMIT button**; when a dropdown question is on screen, map the **🔽 dropdown**. Flip on **"Stuck 30s? Click NEXT ×3"** for sort slides. Random answers get picked each time — this is for blasting through ungraded knowledge checks, so maybe don't use it on anything that counts.
+7. Done. A little badge bottom-right shows what it's doing (`AutoNext ▶ 43%` or `AutoNext 👁 watching play/pause`). It goes green when it clicks.
 
 Everything is saved **per site**, so you set it up once and it survives reloads and new slides. Works inside iframes too (course players basically always live in an iframe).
 
@@ -61,7 +71,7 @@ Everything is saved **per site**, so you set it up once and it survives reloads 
 
 ## Testing it
 
-Open `test-page.html` (or serve the folder and open it) — it's a mock course player where each slide "plays" for 12 seconds, complete with a pause button that flips to ▶ when the slide ends. Set up either trigger mode on it and watch it advance all 3 slides by itself. It even shows the blocking *"view the entire slide"* popup if NEXT is clicked too early, so you can test the OK-button mapping too.
+Open `test-page.html` (or serve the folder and open it) — it's a mock course player with all five slide types: two videos (12s each, with a pause icon that flips to ▶ at the end), a multiple-choice question, a sort-these-options slide that wants NEXT clicked 3 times, and a dropdown question. It shows the blocking *"view the entire slide"* popup when NEXT is clicked early too. Map everything and watch it complete the whole module by itself.
 
 ## Privacy
 
