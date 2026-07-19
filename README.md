@@ -86,3 +86,7 @@ The three settings are saved locally with Chrome extension storage and are kept 
 - **The page layout moved:** drag the orange or blue marker back onto its button. You do not have to clear everything.
 
 If I want to start over, **Clear these three settings** removes the saved progress bar and both click spots for that website.
+
+---
+
+📧 [Email me](mailto:leafyfun100@gmail.com)
