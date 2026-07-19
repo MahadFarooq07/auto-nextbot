@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AutoNext - Progress Bar Auto Clicker",
   "version": "1.0.0",
-  "description": "Pick a progress bar and a Next button on any site. When the bar fills up, Next gets clicked automatically.",
+  "description": "Read one progress bar, click one permanent NEXT spot at 100%, and dismiss one mapped OK popup.",
   "permissions": ["storage"],
   "host_permissions": ["<all_urls>"],
   "content_scripts": [

@@ -1,154 +1,37 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
-<meta charset="utf-8" />
+<meta charset="utf-8">
 <style>
-  body {
-    width: 300px;
-    margin: 0;
-    font: 13px/1.5 system-ui, sans-serif;
-    background: #16161f;
-    color: #eee;
-  }
-  header {
-    padding: 10px 14px;
-    background: #4c1de7;
-    font-weight: 600;
-    font-size: 14px;
-  }
+  body { width: 310px; margin: 0; background: #16161f; color: #eee; font: 13px/1.45 system-ui,sans-serif; }
+  header { padding: 11px 14px; background: #4c1de7; font-size: 15px; font-weight: 700; }
   main { padding: 12px 14px; }
-  .host {
-    color: #9aa;
-    font-size: 11px;
-    margin-bottom: 10px;
-    word-break: break-all;
-  }
-  .section {
-    color: #778;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    margin: 10px 0 2px;
-  }
-  button {
-    display: block;
-    width: 100%;
-    margin: 6px 0;
-    padding: 8px 10px;
-    border: 1px solid transparent;
-    border-radius: 8px;
-    background: #2b2b3d;
-    color: #fff;
-    font: inherit;
-    cursor: pointer;
-    text-align: left;
-  }
-  button:hover { background: #3a3a52; }
-  button.active { border-color: #4c1de7; background: #26204a; }
-  button .check { float: right; color: #22c55e; font-weight: 700; }
-  button .miss { float: right; color: #f87171; }
-  button .opt { float: right; color: #778; }
-  .row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin: 10px 0 4px;
-  }
-  input[type="number"] {
-    width: 56px;
-    background: #2b2b3d;
-    border: 1px solid #444;
-    border-radius: 6px;
-    color: #fff;
-    padding: 3px 6px;
-    font: inherit;
-  }
-  .switch { position: relative; width: 40px; height: 22px; }
-  .switch input { opacity: 0; width: 0; height: 0; }
-  .slider {
-    position: absolute; inset: 0; cursor: pointer;
-    background: #555; border-radius: 999px; transition: .2s;
-  }
-  .slider:before {
-    content: ""; position: absolute; height: 16px; width: 16px;
-    left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s;
-  }
-  .switch input:checked + .slider { background: #22c55e; }
-  .switch input:checked + .slider:before { transform: translateX(18px); }
-  #status {
-    margin-top: 10px;
-    padding: 8px 10px;
-    background: #20202e;
-    border-radius: 8px;
-    font-size: 12px;
-    color: #bcd;
-    min-height: 32px;
-  }
-  #progressWrap {
-    height: 6px; background: #333; border-radius: 999px;
-    margin-top: 6px; overflow: hidden;
-  }
-  #progressFill {
-    height: 100%; width: 0; background: #4c1de7; border-radius: 999px;
-    transition: width .3s linear;
-  }
-  #adjustNext { background: #3d2b14; }
-  #adjustNext:hover { background: #52381a; }
-  #clear {
-    background: none; color: #f87171; text-align: center; font-size: 12px;
-  }
-  #clear:hover { background: #2b1d1d; }
-  .hint { color: #778; font-size: 11px; margin-top: 8px; }
+  #host { color: #99a; font-size: 11px; margin-bottom: 10px; word-break: break-all; }
+  button { width: 100%; display: block; margin: 8px 0; padding: 10px; border: 1px solid transparent; border-radius: 9px; color: #fff; font: inherit; text-align: left; cursor: pointer; }
+  #pickBar { background: #30245d; }
+  #setNext { background: #4a3010; border-color: #9a6200; }
+  #setOk { background: #123b50; border-color: #16769e; }
+  button:hover { filter: brightness(1.2); }
+  .mark { float: right; color: #8b8b9b; }
+  .mark.set { color: #4ade80; font-weight: 700; }
+  #status { margin-top: 12px; min-height: 38px; padding: 9px 10px; border-radius: 8px; background: #20202e; color: #cbd5e1; font-size: 12px; }
+  #progressTrack { height: 7px; margin-top: 7px; overflow: hidden; border-radius: 999px; background: #343445; }
+  #progressFill { width: 0; height: 100%; background: #7c4dff; transition: width .25s linear; }
+  #clear { margin-top: 12px; background: transparent; color: #f87171; text-align: center; font-size: 12px; }
+  .hint { margin-top: 8px; color: #7f7f91; font-size: 11px; }
 </style>
 </head>
 <body>
-  <header>AutoNext</header>
+  <header>AutoNext — Simple</header>
   <main>
-    <div class="host" id="host">…</div>
-
-    <div class="section">Trigger — pick ONE</div>
-    <button id="pickBar">📊 Progress bar fills up <span class="miss" id="barMark">not set</span></button>
-    <button id="pickState">⏯ Play/pause icon changes <span class="miss" id="stateMark">not set</span></button>
-
-    <div class="section">Action</div>
-    <button id="pickNext">👆 Pick NEXT button / spot <span class="miss" id="nextMark">not set</span></button>
-    <button id="adjustNext">📍 Drag-adjust the NEXT click spot</button>
-    <button id="pickOk">🆗 Pick popup "OK" button <span class="opt" id="okMark">optional</span></button>
-
-    <div class="section">Quiz slides — all optional</div>
-    <button id="pickAnswer">🅰 Pick one answer option <span class="opt" id="answerMark">optional</span></button>
-    <button id="pickSubmit">☑️ Pick SUBMIT button <span class="opt" id="submitMark">optional</span></button>
-    <button id="pickDropdown">🔽 Pick dropdown <span class="opt" id="dropdownMark">optional</span></button>
-
-    <div class="row">
-      <span title="For sort-these-options slides and anything else with no bar/video">Stuck 30s? Click NEXT ×3</span>
-      <label class="switch">
-        <input type="checkbox" id="stall" />
-        <span class="slider"></span>
-      </label>
-    </div>
-
-    <div class="row">
-      <span>Auto-click enabled</span>
-      <label class="switch">
-        <input type="checkbox" id="enabled" />
-        <span class="slider"></span>
-      </label>
-    </div>
-
-    <div class="row" id="thresholdRow">
-      <span>Trigger at (%)</span>
-      <input type="number" id="threshold" min="50" max="100" step="1" value="99" />
-    </div>
-
+    <div id="host">Loading…</div>
+    <button id="pickBar">1. Set the progress bar <span id="barMark" class="mark">not set</span></button>
+    <button id="setNext">2. 🟠 Set permanent NEXT spot <span id="nextMark" class="mark">not set</span></button>
+    <button id="setOk">3. 🔵 Set permanent popup OK spot <span id="okMark" class="mark">optional</span></button>
     <div id="status">Loading…</div>
-    <div id="progressWrap"><div id="progressFill"></div></div>
-
-    <button id="clear">Clear selections for this site</button>
-    <div class="hint">
-      While picking: hover the element, use the <b>scroll wheel</b> to cycle
-      through overlapping / nested elements, then click. Works inside iframes.
-    </div>
+    <div id="progressTrack"><div id="progressFill"></div></div>
+    <button id="clear">Clear these three settings</button>
+    <div class="hint">Set the progress bar first. The orange and blue markers stay on the page and can always be dragged again.</div>
   </main>
   <script src="popup.js"></script>
 </body>
