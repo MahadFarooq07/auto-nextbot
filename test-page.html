@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Mock Course Player — AutoNext test</title>
+<style>
+  body {
+    margin: 0;
+    background: #6b7280;
+    font-family: system-ui, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+  .player {
+    width: 900px;
+    background: #000;
+    border-radius: 6px;
+    padding: 14px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.4);
+  }
+  .slide {
+    background: #fff;
+    border-radius: 24px;
+    min-height: 260px;
+    padding: 40px;
+    color: #111;
+    font-size: 18px;
+    line-height: 1.5;
+  }
+  .banner {
+    margin-top: 14px;
+    background: linear-gradient(#3b4a8f, #1f2a5e);
+    color: #fff;
+    text-align: center;
+    font-weight: 800;
+    font-size: 26px;
+    letter-spacing: 2px;
+    padding: 14px;
+    border-radius: 6px;
+    text-transform: uppercase;
+  }
+  /* the progress bar — track + fill, like the real player */
+  #progressTrack {
+    margin-top: 12px;
+    height: 8px;
+    background: #3a3a3a;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  #progressFill {
+    height: 100%;
+    width: 0;
+    background: #4c1de7;
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    color: #4ade80;
+    font-size: 13px;
+  }
+  .roundBtn {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid #eab308; background: #4c1de7; color: #fff;
+    cursor: pointer; font-size: 14px;
+  }
+  .spacer { flex: 1; }
+  #counter { color: #4ade80; margin-right: 8px; }
+  .navBtn {
+    border-radius: 999px;
+    padding: 8px 22px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #prevBtn { background: transparent; color: #eab308; border: 1px solid #eab308; }
+  #nextBtn { background: #4c1de7; color: #fff; border: 1px solid #eab308; }
+  #nextBtn:active { transform: scale(.96); }
+  #done {
+    display: none;
+    margin-top: 12px;
+    background: #14532d;
+    color: #86efac;
+    padding: 12px;
+    border-radius: 6px;
+    text-align: center;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+  <div class="player">
+    <div class="slide" id="slideText"></div>
+    <div class="banner" id="slideTitle"></div>
+    <div id="progressTrack"><div id="progressFill"></div></div>
+    <div class="controls">
+      <button class="roundBtn" title="menu">≡</button>
+      <button class="roundBtn" id="pauseBtn" title="pause/play">❚❚</button>
+      <span id="time">0:00 / 0:12</span>
+      <span class="spacer"></span>
+      <span id="counter">1 of 3</span>
+      <button class="navBtn" id="prevBtn">&lt; PREV</button>
+      <button class="navBtn" id="nextBtn">NEXT &gt;</button>
+    </div>
+    <div id="done">✅ Module complete — NEXT was clicked on every slide.</div>
+  </div>
+
+<script>
+  const SLIDES = [
+    { title: "Seatbelt Penalties", text: "Drivers are also responsible for ensuring any child who is not big enough or old enough to use a seatbelt is secured in an appropriate child car seat or booster seat." },
+    { title: "Demerit Points", text: "If convicted, you will be fined between $200 and $1,000 and receive 2 demerit points. Demerit points remain on your driving record for two years." },
+    { title: "Summary", text: "Always buckle up, and make sure every passenger under 16 is properly secured before you drive." },
+  ];
+  const DURATION_S = 12; // each slide takes 12 seconds
+  let slide = 0;
+  let progress = 0; // 0..100
+  let paused = false;
+
+  const fill = document.getElementById("progressFill");
+  const time = document.getElementById("time");
+  const counter = document.getElementById("counter");
+
+  function fmt(s) { return Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0"); }
+
+  function render() {
+    document.getElementById("slideTitle").textContent = SLIDES[slide].title;
+    document.getElementById("slideText").textContent = SLIDES[slide].text;
+    counter.textContent = (slide + 1) + " of " + SLIDES.length;
+    fill.style.width = progress + "%";
+    time.textContent = fmt(progress / 100 * DURATION_S) + " / " + fmt(DURATION_S);
+  }
+
+  // Like the real player: the pause icon flips back to play when the slide
+  // finishes (or when manually paused).
+  const pauseBtn = document.getElementById("pauseBtn");
+  function renderPauseBtn() {
+    const playing = !paused && progress < 100;
+    pauseBtn.textContent = playing ? "❚❚" : "▶";
+    pauseBtn.setAttribute("aria-label", playing ? "pause" : "play");
+  }
+
+  setInterval(() => {
+    if (paused) return;
+    progress = Math.min(100, progress + 100 / (DURATION_S * 10));
+    fill.style.width = progress + "%";
+    time.textContent = fmt(progress / 100 * DURATION_S) + " / " + fmt(DURATION_S);
+    renderPauseBtn();
+  }, 100);
+
+  document.getElementById("nextBtn").addEventListener("click", () => {
+    if (slide < SLIDES.length - 1) {
+      slide++;
+      progress = 0;
+      render();
+    } else {
+      document.getElementById("done").style.display = "block";
+    }
+  });
+  document.getElementById("prevBtn").addEventListener("click", () => {
+    if (slide > 0) { slide--; progress = 0; render(); }
+  });
+  pauseBtn.addEventListener("click", () => { paused = !paused; renderPauseBtn(); });
+
+  render();
+  renderPauseBtn();
+</script>
+</body>
+</html>
