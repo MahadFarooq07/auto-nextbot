@@ -26,12 +26,17 @@
   // slide starts playing) never re-triggers.
   const STATE_STABLE_MS = 5000;
 
+  // Separate, shorter cooldown for dismissing "OK" popups.
+  const OK_COOLDOWN_MS = 2500;
+
   const DEFAULTS = {
     mode: "bar", // "bar" | "state"
     barSelector: null,
     stateSelector: null,
     nextSelector: null,
     nextPoint: null, // { fx, fy } as fractions of the viewport
+    okSelector: null, // optional popup-dismiss button ("view entire slide" etc.)
+    okPoint: null,
     enabled: true,
     threshold: 99,
   };
@@ -46,6 +51,7 @@
   let adjusting = false;
   let dragging = false;
   let lastClickAt = 0;
+  let okLastClickAt = 0;
   let lastProgress = null;
   let statusNote = "";
   let noteUntil = 0;
@@ -264,14 +270,38 @@
     }
   }
 
+  // The mapped OK button (blocking popup) — click it whenever it is actually
+  // visible on screen. The elementFromPoint check makes sure it is really the
+  // thing on top, so a hidden/covered button never gets phantom-clicked.
+  function checkOkPopup() {
+    const el = document.querySelector(cfg.okSelector);
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return;
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    if (cx < 0 || cy < 0 || cx > innerWidth || cy > innerHeight) return;
+    const top = document.elementFromPoint(cx, cy);
+    if (!top || !(el.contains(top) || top.contains(el))) return;
+    const now = Date.now();
+    if (now - okLastClickAt < OK_COOLDOWN_MS) return;
+    okLastClickAt = now;
+    fullClick(el, cx, cy);
+    setNote("clicked OK ✓", 2500);
+  }
+
   /* ---------------- main poll loop ---------------- */
 
   function tick() {
     if (!cfg) return;
+    if (!cfg.enabled) {
+      updateBadge();
+      return;
+    }
+    if (cfg.okSelector) checkOkPopup();
     const hasNext = !!(cfg.nextSelector || cfg.nextPoint);
     const hasTrigger = cfg.mode === "state" ? !!cfg.stateSelector : !!cfg.barSelector;
-    if (!hasNext || !hasTrigger) return;
-    if (!cfg.enabled) {
+    if (!hasNext || !hasTrigger) {
       updateBadge();
       return;
     }
@@ -389,7 +419,8 @@
     const hasNext = !!(cfg && (cfg.nextSelector || cfg.nextPoint));
     const hasTrigger =
       !!cfg && (cfg.mode === "state" ? !!cfg.stateSelector : !!cfg.barSelector);
-    if (!hasNext || !hasTrigger) {
+    const hasOk = !!(cfg && cfg.okSelector);
+    if ((!hasNext || !hasTrigger) && !hasOk) {
       badge.style.display = "none";
       return;
     }
@@ -398,6 +429,10 @@
     if (!cfg.enabled) {
       badge.textContent = "AutoNext ⏸ paused" + note;
       badge.style.background = "rgba(90,90,90,.85)";
+    } else if (!hasNext || !hasTrigger) {
+      badge.textContent = "AutoNext 🆗 popup watcher" + note;
+      badge.style.background =
+        note.includes("✓") ? "rgba(30,130,60,.9)" : "rgba(76,29,231,.88)";
     } else if (cfg.mode === "state") {
       const armed = stateSig !== null && Date.now() - stateSigSince >= STATE_STABLE_MS;
       badge.textContent =
@@ -560,6 +595,12 @@
       stateSigSince = 0;
       statePend = null;
       statePendN = 0;
+    } else if (picking === "ok") {
+      cfg.okSelector = sel;
+      cfg.okPoint = { fx: e.clientX / innerWidth, fy: e.clientY / innerHeight };
+      // Don't insta-click the popup that is open right now — give the user a
+      // moment after picking.
+      okLastClickAt = Date.now();
     } else {
       cfg.nextSelector = sel;
       cfg.nextPoint = { fx: e.clientX / innerWidth, fy: e.clientY / innerHeight };
@@ -598,6 +639,7 @@
     bar: "Hover the PROGRESS BAR — scroll wheel cycles overlapping/nested elements",
     state: "Hover the PLAY/PAUSE button — scroll wheel cycles overlapping/nested elements",
     next: "Hover the NEXT button (or any spot to click) — scroll cycles elements",
+    ok: "Hover the popup's OK button — it will be auto-clicked whenever the popup shows up",
   };
 
   function startPicking(target) {
@@ -752,6 +794,7 @@
       barFound: hasBar ? !!document.querySelector(cfg.barSelector) : false,
       stateFound: hasState ? !!document.querySelector(cfg.stateSelector) : false,
       nextFound: hasPoint || (hasNextSel && !!document.querySelector(cfg.nextSelector)),
+      hasOk: !!(cfg && cfg.okSelector),
       stateArmed: stateSig !== null && Date.now() - stateSigSince >= STATE_STABLE_MS,
       enabled: !!(cfg && cfg.enabled),
       threshold: cfg ? cfg.threshold ?? 99 : 99,

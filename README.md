@@ -28,6 +28,9 @@ This was the best idea: when a video finishes, the **pause icon (⏸) flips back
 
 It doesn't matter what state the button is in when you pick it — the extension learns what the button looks like, waits until that look has held steady for ~5 seconds, and only fires when it *changes* after being stable. That way the flip right after clicking NEXT (new video starting) never re-triggers it.
 
+### 4. Auto-dismiss blocking popups
+Some players throw up a *"You have to view the entire slide to continue"* popup with an OK button that blocks everything. You can now map that OK button too (**🆗 Pick popup "OK" button** — do it while the popup is open). The extension checks every half second whether that button is actually visible **and on top** — if the popup shows up, OK gets clicked automatically. When the popup is closed, the hidden button is never touched, so there are no phantom clicks.
+
 ![Extension popup](screenshots/popup.png)
 
 ## Install
@@ -45,7 +48,8 @@ It doesn't matter what state the button is in when you pick it — the extension
    - **⏯ Play/pause icon changes** — click it, then pick the play/pause button on the player. Fires when the icon changes after the video has been playing. This is the more reliable option for video players.
 3. Pick the action: **👆 Pick NEXT button / spot** — click exactly where NEXT should be clicked
 4. If the click spot ever needs moving: **📍 Drag-adjust the NEXT click spot** and drag the orange marker wherever you want
-5. Done. A little badge bottom-right shows what it's doing (`AutoNext ▶ 43%` or `AutoNext 👁 watching play/pause`). It goes green when it clicks.
+5. Optional: if the site shows a blocking *"view the entire slide"* popup, wait for it to appear once, then **🆗 Pick popup "OK" button** while it's open — from then on it gets dismissed automatically
+6. Done. A little badge bottom-right shows what it's doing (`AutoNext ▶ 43%` or `AutoNext 👁 watching play/pause`). It goes green when it clicks.
 
 Everything is saved **per site**, so you set it up once and it survives reloads and new slides. Works inside iframes too (course players basically always live in an iframe).
 
@@ -57,7 +61,7 @@ Everything is saved **per site**, so you set it up once and it survives reloads 
 
 ## Testing it
 
-Open `test-page.html` (or serve the folder and open it) — it's a mock course player where each slide "plays" for 12 seconds, complete with a pause button that flips to ▶ when the slide ends. Set up either trigger mode on it and watch it advance all 3 slides by itself.
+Open `test-page.html` (or serve the folder and open it) — it's a mock course player where each slide "plays" for 12 seconds, complete with a pause button that flips to ▶ when the slide ends. Set up either trigger mode on it and watch it advance all 3 slides by itself. It even shows the blocking *"view the entire slide"* popup if NEXT is clicked too early, so you can test the OK-button mapping too.
 
 ## Privacy
 

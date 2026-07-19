@@ -39,6 +39,14 @@ async function refresh() {
   setMark("barMark", s.hasBar, s.barFound);
   setMark("stateMark", s.hasState, s.stateFound);
   setMark("nextMark", s.hasNext, s.nextFound);
+  const okMark = document.getElementById("okMark");
+  if (s.hasOk) {
+    okMark.className = "check";
+    okMark.textContent = "✓";
+  } else {
+    okMark.className = "opt";
+    okMark.textContent = "optional";
+  }
 
   // Highlight which trigger mode is active.
   document.getElementById("pickBar").classList.toggle("active", s.hasCfg && s.mode === "bar");
@@ -85,6 +93,7 @@ async function init() {
   document.getElementById("pickBar").addEventListener("click", pick("bar"));
   document.getElementById("pickState").addEventListener("click", pick("state"));
   document.getElementById("pickNext").addEventListener("click", pick("next"));
+  document.getElementById("pickOk").addEventListener("click", pick("ok"));
   document.getElementById("adjustNext").addEventListener("click", async () => {
     await send({ type: "adjustNext" });
     window.close();

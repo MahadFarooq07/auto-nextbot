@@ -107,6 +107,17 @@
     <div id="done">✅ Module complete — NEXT was clicked on every slide.</div>
   </div>
 
+  <!-- blocking popup, like real players show when NEXT is clicked too early -->
+  <div id="popupOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;">
+    <div style="position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);background:#4b5563;color:#4ade80;padding:28px 40px;border-radius:8px;text-align:center;font-size:15px;">
+      <div style="font-size:26px;margin-bottom:10px;">ⓘ</div>
+      You have to view the entire slide to continue
+      <div style="margin-top:16px;">
+        <button id="okBtn" style="background:#4c1de7;color:#fff;border:0;border-radius:999px;padding:8px 26px;font-weight:700;cursor:pointer;">OK</button>
+      </div>
+    </div>
+  </div>
+
 <script>
   const SLIDES = [
     { title: "Seatbelt Penalties", text: "Drivers are also responsible for ensuring any child who is not big enough or old enough to use a seatbelt is secured in an appropriate child car seat or booster seat." },
@@ -149,7 +160,15 @@
     renderPauseBtn();
   }, 100);
 
+  document.getElementById("okBtn").addEventListener("click", () => {
+    document.getElementById("popupOverlay").style.display = "none";
+  });
+
   document.getElementById("nextBtn").addEventListener("click", () => {
+    if (progress < 100) {
+      document.getElementById("popupOverlay").style.display = "block";
+      return;
+    }
     if (slide < SLIDES.length - 1) {
       slide++;
       progress = 0;
